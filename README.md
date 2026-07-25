@@ -4,7 +4,7 @@
 
 Autor: Gustavo Gomes
 Status: Planejamento
-Projeto irmão: [`licita-forense`](https://github.com/gustavogomes-dv/licita-forense)
+Projeto irmão: [`auditoria-ml`](https://github.com/gustavogomes-dv/auditoria-ml)
 
 ---
 
