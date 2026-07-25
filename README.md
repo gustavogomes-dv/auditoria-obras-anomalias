@@ -4,11 +4,7 @@
 
 Autor: Gustavo Gomes
 Status: Planejamento
-<<<<<<< HEAD
 Projeto irmão: [`auditoria-ml`](https://github.com/gustavogomes-dv/auditoria-ml)
-=======
-Projeto irmão: [`licita-forense`](https://github.com/gustavogomes-dv/auditoria-ml)
->>>>>>> 1e58d82ccc61bb005cc19181a8c4cfaa92fa01e0
 
 ---
 
