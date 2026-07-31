@@ -1,141 +1,101 @@
-# auditoria-obras-anomalias
+# Auditoria de Obras: Detecção de Anomalias
 
-**Detecção de anomalias e priorização de risco em dados de obras, aplicando estatística, machine learning e explicabilidade à auditoria.**
+Imagina que você trabalha na auditoria de uma construtora grande e precisa conferir se as obras estão dentro do esperado: se o custo faz sentido, se o prazo bateu, se os aditivos não fugiram do razoável. O problema é que são milhares de obras e a equipe é pequena. Não dá para olhar uma por uma. Na prática, a auditoria acaba conferindo só uma amostra pequena e torcendo para que os problemas estejam nela.
 
-Autor: Gustavo Gomes
-Status: Planejamento
-Projeto irmão: [`auditoria-ml`](https://github.com/gustavogomes-dv/auditoria-ml)
+Este projeto resolve isso. Ele lê a carteira inteira de obras, analisa cada uma e devolve uma lista de prioridade: estas aqui são as que você deveria olhar primeiro, e aqui está o motivo de cada uma. Em vez de auditar no escuro, a equipe passa a focar onde a chance de encontrar problema é maior.
 
----
+O número que resume o resultado: olhando apenas as 10% de obras marcadas como risco crítico, a equipe encontra todas as obras problemáticas da base. E a cada dez obras dessa faixa que ela investiga, seis realmente têm algo errado. Uma amostragem aleatória das mesmas 10% acharia só um punhado.
 
-## 1. O que é
+![Visão geral do dashboard](docs/visao-geral.png)
 
-`auditoria-obras-anomalias` é um projeto de ciência de dados que simula o trabalho de uma equipe de auditoria analítica em uma construtora: dado um conjunto grande de obras, identificar automaticamente quais registros apresentam comportamento anômalo e merecem investigação prioritária.
+## Como o sistema decide o que é suspeito
 
-O sistema não substitui o auditor. Ele responde a uma pergunta prática: **com milhares de obras e tempo limitado, quais eu olho primeiro, e por quê?**
+A lógica toda gira em torno de uma ideia simples: comparar cada obra com obras parecidas.
 
-Cada obra recebe um **Risk Score de 0 a 100**, sempre acompanhado de uma **justificativa legível** mostrando quais indicadores puxaram o score para cima. Explicabilidade aqui não é opcional: um alerta que o auditor não entende é um alerta que ele descarta.
+Não faz sentido comparar uma obra industrial com uma casa popular. A industrial custa mais por metro quadrado por natureza, e isso não quer dizer que tem algo errado. Então o sistema separa as obras por tipo e compara cada uma só com as do seu próprio grupo. É como comparar o preço de um apartamento com outros apartamentos do mesmo bairro, não com casas de campo.
 
-## 2. O problema
+![Risco por tipo de obra](docs/risco-por-tipo.png)
 
-Empresas de grande porte processam milhões de registros de obras, contratos, medições, compras e pagamentos. Auditar tudo manualmente é inviável, então a prática comum é amostragem. Na prática isso significa que a maior parte dos dados nunca é olhada, e inconsistências relevantes passam despercebidas.
+A partir daí, o sistema procura obras que fogem do padrão do grupo de três formas diferentes, porque cada uma pega um tipo de problema:
 
-A abordagem analítica inverte a lógica: em vez de amostrar aleatoriamente, usa estatística e machine learning para varrer 100% da base e concentrar a atenção humana onde a probabilidade de problema é maior.
+A primeira olha indicador por indicador e marca quando um valor está longe do normal do grupo. Custo por metro quadrado muito acima da média, prazo que estourou, aditivos exagerados. É a checagem mais direta.
 
-## 3. Dados
+A segunda procura combinações estranhas. Às vezes uma obra não tem nenhum número gritante sozinho, mas a mistura é improvável: custo um pouco alto, produtividade um pouco baixa e muitos fornecedores ao mesmo tempo. Nenhum sinal isolado chamaria atenção, o conjunto sim.
 
-Dataset **fictício e gerado por código** (`src/gerar_dados.py`), simulando cerca de 2.000 obras de uma construtora, com anomalias injetadas de propósito e rotuladas em uma coluna oculta. Isso permite avaliar depois se os métodos de detecção realmente as encontram.
+A terceira compara cada obra com as vizinhas mais próximas dela, procurando pontos que ficaram isolados no meio do conjunto.
 
-Campos por obra:
+No fim, o sistema junta os três olhares em uma nota única de 0 a 100, o Risk Score, e separa as obras em quatro faixas: baixo, médio, alto e crítico. Quanto mais alta a nota, mais prioritária a investigação.
 
-| Grupo | Campos |
-|---|---|
-| Identificação | id_obra, cidade, uf, tipo_empreendimento, empresa_responsavel |
-| Financeiro | valor_contratado, valor_executado, valor_aditivos, valor_materiais, valor_mao_de_obra, valor_compras |
-| Físico | area_construida_m2, qtd_funcionarios, qtd_medicoes, qtd_fornecedores |
-| Prazo | data_inicio, data_termino, prazo_previsto_dias, prazo_realizado_dias |
+## Cada alerta vem com explicação
 
-Gerar os próprios dados, em vez de baixar um CSV pronto, é uma decisão deliberada: demonstra entendimento de como as anomalias se manifestam nos dados e cria um gabarito (ground truth) para medir a taxa de acerto dos detectores.
+Um ponto que fez diferença no projeto: não basta dizer que uma obra é suspeita, é preciso dizer por quê. Um auditor não vai investigar um alerta que ele não entende.
 
-## 4. Feature engineering
-
-Indicadores derivados que alimentam a análise:
-
-- **Financeiros:** custo por m², custo por funcionário, custo diário, percentual de aditivos sobre o contrato, percentual de execução (executado/contratado), proporção materiais vs. mão de obra
-- **Operacionais:** m² por funcionário (produtividade), dias por m², estouro de prazo (%), fornecedores por milhão contratado
-- **Estatísticos (por indicador, dentro do peer group):** z-score, distância da mediana em IQRs, percentil
-
-Ponto central: as comparações são feitas **dentro de grupos comparáveis** (mesmo tipo de empreendimento e faixa de porte), nunca contra a média global. Uma obra industrial cara não é anômala por custar mais que uma casa popular.
-
-## 5. Detecção de anomalias
-
-Três camadas, da mais interpretável para a mais sofisticada:
-
-1. **Regras estatísticas clássicas:** z-score e IQR por indicador, dentro do peer group. Baratas, explicáveis, pegam os casos óbvios.
-2. **Isolation Forest:** anomalias multivariadas, obras onde nenhum indicador isolado grita, mas a combinação é improvável.
-3. **Local Outlier Factor:** análise de densidade local, complementar ao Isolation Forest.
-
-Cada método produz um sub-score independente. A concordância entre métodos é ela mesma um sinal: obra flagrada pelos três é mais suspeita que obra flagrada por um só.
-
-## 6. Risk Score
-
-Combinação ponderada dos sub-scores, normalizada para 0 a 100:
-
-| Componente | Peso |
-|---|---|
-| Flags estatísticas (z-score / IQR) | 40% |
-| Isolation Forest | 30% |
-| LOF | 20% |
-| Concentração de fornecedor / recorrência da empresa | 10% |
-
-Faixas: 0 a 30 baixo · 31 a 60 médio · 61 a 80 alto · 81 a 100 crítico.
-
-Os pesos são explícitos e configuráveis (`config.yaml`). Auditoria exige que o critério de priorização seja defensável, não uma caixa-preta.
-
-## 7. Explicabilidade
-
-Para cada obra no topo do ranking, o sistema gera a justificativa:
+Então cada obra vem com uma justificativa em texto, do tipo:
 
 ```
-Obra 203 | Risk Score 91 (CRÍTICO)
-- custo/m² 38% acima da mediana do peer group (P97)
-- aditivos = 41% do valor contratado (limite legal de referência: 25%)
-- produtividade (m²/funcionário) no P4 do grupo
-- prazo realizado 2.3x o previsto
-- flagrada por 3/3 detectores
+Obra 2267 | Risk Score 99 (crítico)
+- percentual de aditivos: 54% (muito acima da mediana do grupo)
+- percentual de execução: 154% (acima do contratado)
+- flagrada pelos três métodos de detecção
 ```
 
-SHAP é aplicado sobre o Isolation Forest para decompor a contribuição de cada variável nos casos multivariados.
+Isso transforma um número frio em algo acionável. O auditor lê e já sabe por onde começar.
 
-## 8. Dashboard
+![Auditoria individual](docs/auditoria-individual.png)
 
-Interface simples em **Streamlit** (`app.py`), com 3 telas:
+## O painel
 
-1. **Visão geral:** total de obras, distribuição do Risk Score, indicadores agregados
-2. **Ranking de risco:** tabela ordenada por score, com filtros por UF, tipo e faixa
-3. **Auditoria individual:** seleciona uma obra e vê indicadores, posição vs. peer group (boxplots) e a justificativa completa
+Tudo isso fica acessível em um painel visual com três telas: uma visão geral da carteira, um ranking com as obras ordenadas por prioridade (com filtros por tipo e faixa de risco), e uma tela de auditoria individual onde você seleciona uma obra e vê a nota, a justificativa e a posição dela em relação às obras parecidas.
 
-## 9. Estrutura do repositório
+![Ranking de risco](docs/ranking.png)
+
+## Sobre os dados
+
+As obras usadas aqui são fictícias, criadas por código. Isso foi uma escolha, não uma limitação: ao gerar os dados, dá para plantar problemas de propósito e guardar em segredo quais obras têm defeito. Depois, é só conferir se o sistema conseguiu achar esses problemas sozinho. É a forma de provar que o método funciona, e não só de afirmar que funciona.
+
+Nesse teste, os três métodos de detecção acertam entre 88% e 100% dos casos plantados, e quando os três concordam sobre uma obra, ela é problema de verdade em 96% das vezes.
+
+## Como rodar
+
+Precisa de Python 3.10 ou mais novo.
+
+```bash
+git clone https://github.com/gustavogomes-dv/auditoria-obras-anomalias.git
+cd auditoria-obras-anomalias
+
+python -m venv .venv
+source .venv/Scripts/activate    # Windows (Git Bash)
+# source .venv/bin/activate      # Linux ou Mac
+
+pip install -r requirements.txt
+
+python main.py           # processa todos os dados
+streamlit run app.py     # abre o painel no navegador
+```
+
+Os dados já vêm prontos no repositório, então o painel abre direto. Rodar `python main.py` refaz tudo do zero.
+
+## Organização do projeto
 
 ```
 auditoria-obras-anomalias/
-├── data/
-│   ├── raw/                # dataset gerado
-│   └── processed/          # features calculadas
-├── notebooks/
-│   ├── 01_eda.ipynb        # análise exploratória e estatística
-│   ├── 02_features.ipynb   # engenharia de atributos
-│   └── 03_anomalias.ipynb  # comparação dos detectores vs. gabarito
-├── src/
-│   ├── gerar_dados.py
-│   ├── features.py
-│   ├── detectores.py
-│   ├── risk_score.py
-│   └── explicar.py
-├── tests/
-├── app.py                  # dashboard Streamlit
-├── config.yaml             # pesos e limiares
-├── requirements.txt
-└── README.md
+├── data/               dados brutos e processados
+├── notebooks/          análise passo a passo, do exploratório à detecção
+├── src/                o código do sistema, dividido por etapa
+│   ├── gerar_dados.py  cria as obras fictícias
+│   ├── features.py     calcula os indicadores
+│   ├── detectores.py   os três métodos de detecção
+│   ├── risk_score.py   junta tudo na nota final
+│   └── explicar.py     gera a justificativa de cada obra
+├── main.py             roda o processo inteiro de uma vez
+├── app.py              o painel visual
+└── config.yaml         onde os pesos e faixas podem ser ajustados
 ```
 
-## 10. Stack
+## Ferramentas
 
-Python · Pandas · NumPy · Scikit-Learn · SHAP · Plotly · Streamlit · Pytest
+Python, pandas, scikit-learn, SHAP, Plotly e Streamlit.
 
-Sem banco de dados, sem Docker, sem API. O projeto roda com `pip install -r requirements.txt` e `streamlit run app.py`. Simplicidade de reprodução é parte do valor: quem abrir o repo consegue executar em 2 minutos.
+## Autor
 
-## 11. Roadmap
-
-**Fase 1: dados e estatística**
-Gerador de dataset com anomalias rotuladas · EDA completa em notebook · flags por z-score e IQR com peer groups
-
-**Fase 2: anomalias e Risk Score**
-Isolation Forest e LOF · avaliação contra o gabarito (recall/precision dos detectores) · Risk Score combinado
-
-**Fase 3: explicabilidade e entrega**
-SHAP · geração de justificativas em texto · dashboard Streamlit · README final com prints e resultados
-
-## 12. O que este projeto demonstra
-
-Estatística aplicada (distribuições, outliers, análise por peer group) · detecção de anomalias avaliada contra gabarito · desenho de score interpretável · explicabilidade de modelos · visualização de dados · organização de projeto Python com testes · comunicação técnica voltada a um usuário de negócio, o auditor.
+Gustavo Gomes — [github.com/gustavogomes-dv](https://github.com/gustavogomes-dv)
