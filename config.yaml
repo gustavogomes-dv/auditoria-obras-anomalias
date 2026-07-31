@@ -1,0 +1,11 @@
+pesos:
+  flags_estatisticas: 0.40
+  isolation_forest: 0.30
+  lof: 0.20
+  concentracao_fornecedores: 0.10
+
+# Limites superiores de cada faixa de risco (a ultima vai ate 100).
+faixas:
+  baixo: 30
+  medio: 60
+  alto: 80
