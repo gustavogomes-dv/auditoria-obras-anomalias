@@ -95,7 +95,3 @@ auditoria-obras-anomalias/
 ## Ferramentas
 
 Python, pandas, scikit-learn, SHAP, Plotly e Streamlit.
-
-## Autor
-
-Gustavo Gomes — [github.com/gustavogomes-dv](https://github.com/gustavogomes-dv)
